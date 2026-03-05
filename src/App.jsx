@@ -23,6 +23,7 @@ const BASELINE_ITEMS = [
   { id: 'g7', category: '烤物', name: '烏魚子棒棒', unit: '枝' },
   { id: 'g8', category: '烤物', name: '秋刀魚', unit: '盒' },
   { id: 'g9', category: '烤物', name: '焗烤龍蝦', unit: '盒' },
+  { id: 'g10', category: '烤物', name: '海鮮茶碗蒸', unit: '份' },
 ];
 
 const CATEGORY_COLORS = {
@@ -33,30 +34,6 @@ const CATEGORY_COLORS = {
 };
 
 const CHART_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
-
-// --- 產生模擬歷史資料 ---
-const generateMockHistory = () => {
-  const history = [];
-  const today = new Date();
-  for (let i = 7; i > 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
-    
-    const dayRecords = BASELINE_ITEMS.map(item => ({
-      ...item,
-      qty: Math.floor(Math.random() * 30) + 10,
-      time: '12:00'
-    }));
-    
-    history.push({
-      date: dateStr,
-      store: '四維店',
-      records: dayRecords
-    });
-  }
-  return history;
-};
 
 export default function App() {
   // --- 狀態管理 ---
@@ -109,11 +86,7 @@ export default function App() {
     const savedStore = localStorage.getItem('kitchen_storeName'); 
 
     if (savedHistory) setHistory(JSON.parse(savedHistory));
-    else {
-      const mockData = generateMockHistory();
-      setHistory(mockData);
-      localStorage.setItem('kitchen_history', JSON.stringify(mockData));
-    }
+    else setHistory([]);
 
     if (savedActiveItems) setActiveItems(JSON.parse(savedActiveItems));
     if (savedTodayBatches) setTodayBatches(JSON.parse(savedTodayBatches));
@@ -536,7 +509,7 @@ export default function App() {
 
       {/* --- 新增限定品 Modal --- */}
       {newItemModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[60] px-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95">
             <h3 className="font-bold text-lg mb-4">新增限定品項</h3>
             <div className="space-y-4">
@@ -555,7 +528,12 @@ export default function App() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-full flex flex-col animate-in zoom-in-95">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
               <h3 className="font-bold text-lg flex items-center"><CalendarPlus className="w-5 h-5 mr-2 text-indigo-600"/> 補登歷史遺漏紀錄</h3>
-              <button onClick={() => setRetroModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setNewItemModalOpen(true)} className="text-sm px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-medium flex items-center transition-colors">
+                  <Plus className="w-4 h-4 mr-1" /> 新增限定品
+                </button>
+                <button onClick={() => setRetroModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+              </div>
             </div>
             
             <div className="overflow-y-auto p-6 flex-1 bg-slate-50/50">
