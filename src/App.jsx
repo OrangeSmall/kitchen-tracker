@@ -7,6 +7,10 @@ const BASELINE_ITEMS = [
   { id: 'b1', category: '便當', name: '純雞', unit: '個' },
   { id: 'b2', category: '便當', name: '雞+魚', unit: '個' },
   { id: 'b3', category: '便當', name: '魚+魚', unit: '個' },
+  { id: 'b4', category: '便當', name: '薑汁豬肉丼', unit: '個' }, // 新增：薑汁豬肉丼
+  { id: 'b5', category: '便當', name: '和風牛肉丼', unit: '個' }, // 新增：和風牛肉丼
+  { id: 'b6', category: '便當', name: '排骨飯', unit: '個' },   // 新增：排骨飯
+  { id: 'b7', category: '便當', name: '其他品項', unit: '個' }, // 新增：其他品項
   { id: 'f1', category: '炸物', name: '白身魚', unit: '份' },
   { id: 'f2', category: '炸物', name: '竹筴魚', unit: '份' },
   { id: 'f3', category: '炸物', name: '牛肉餅', unit: '份' },
@@ -14,6 +18,8 @@ const BASELINE_ITEMS = [
   { id: 'f5', category: '炸物', name: '厚蝦排', unit: '份' },
   { id: 'f6', category: '炸物', name: '炸牡蠣', unit: '份' },
   { id: 'f7', category: '炸物', name: '蟹味棒', unit: '份' },
+  { id: 'f8', category: '炸物', name: '咖哩可樂餅', unit: '份' }, // 新增：咖哩可樂餅
+  { id: 'f9', category: '炸物', name: '酥炸目光魚', unit: '份' }, // 新增：酥炸目光魚
   { id: 'g1', category: '烤物', name: '魚肚', unit: '片' },
   { id: 'g2', category: '烤物', name: '魚頭', unit: '個' },
   { id: 'g3', category: '烤物', name: '鯖魚', unit: '片' },
@@ -74,7 +80,6 @@ export default function App() {
     const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     setBatchTime(timeString);
 
-    // 預設補登日期為昨天
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     setRetroData(prev => ({ ...prev, date: yesterday.toISOString().split('T')[0] }));
@@ -88,7 +93,15 @@ export default function App() {
     if (savedHistory) setHistory(JSON.parse(savedHistory));
     else setHistory([]);
 
-    if (savedActiveItems) setActiveItems(JSON.parse(savedActiveItems));
+    // 智慧合併菜單邏輯
+    if (savedActiveItems) {
+      const parsedItems = JSON.parse(savedActiveItems);
+      const customLimitedItems = parsedItems.filter(item => item.isLimited);
+      setActiveItems([...BASELINE_ITEMS, ...customLimitedItems]);
+    } else {
+      setActiveItems(BASELINE_ITEMS);
+    }
+
     if (savedTodayBatches) setTodayBatches(JSON.parse(savedTodayBatches));
     if (savedRecorder) {
       setRecorderName(savedRecorder);
@@ -170,7 +183,6 @@ export default function App() {
         });
       } catch (error) { console.error('上傳 Google Sheets 失敗:', error); }
 
-      // 更新本地歷史資料 (優化: 避免覆蓋不同門市的同日資料)
       const newHistory = [...history];
       const existingIdx = newHistory.findIndex(h => h.date === todayStr && h.store === storeName);
       
@@ -185,7 +197,11 @@ export default function App() {
       localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
 
       setTodayBatches([]);
-      setActiveItems(BASELINE_ITEMS); 
+      
+      // 結算後保留限定品
+      const currentLimitedItems = activeItems.filter(item => item.isLimited);
+      setActiveItems([...BASELINE_ITEMS, ...currentLimitedItems]); 
+      
       showAlert("成功", "當日結算完成！資料已同步存入 Google Sheets。");
     });
   };
