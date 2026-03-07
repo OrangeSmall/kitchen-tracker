@@ -41,7 +41,7 @@ const CATEGORY_COLORS = {
 
 const CHART_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
 
-// 🌟🌟🌟 請將您剛剛部署取得的「網頁應用程式網址」貼在下方的引號內 (取代原本的) 🌟🌟🌟
+// 🌟🌟🌟 記得貼上您專屬的 Apps Script 網址 🌟🌟🌟
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6IwmqfbSP1m0Xhsw782RqHxk-BGykMZ9XXOGdHPs3FUMReuQ5lb5PSBUdY8qP6nRl/exec';
 
 export default function App() {
@@ -51,12 +51,10 @@ export default function App() {
   const [storeName, setStoreName] = useState('四維店'); 
   const [batchTime, setBatchTime] = useState('');
   
-  // 資料狀態
   const [activeItems, setActiveItems] = useState(BASELINE_ITEMS);
   const [todayBatches, setTodayBatches] = useState([]);
   const [history, setHistory] = useState([]);
   
-  // UI 狀態
   const [newItemModalOpen, setNewItemModalOpen] = useState(false);
   const [inputs, setInputs] = useState({}); 
   const [newItemData, setNewItemData] = useState({ name: '', category: '限定品', unit: '份' });
@@ -64,17 +62,10 @@ export default function App() {
   const [viewMode, setViewMode] = useState('mobile'); 
   const [isExporting, setIsExporting] = useState(false);
 
-  // 補登功能狀態
   const [retroModalOpen, setRetroModalOpen] = useState(false);
   const [retroInputs, setRetroInputs] = useState({});
-  const [retroData, setRetroData] = useState({
-    date: '',
-    time: '12:00',
-    store: '四維店',
-    recorder: ''
-  });
+  const [retroData, setRetroData] = useState({ date: '', time: '12:00', store: '四維店', recorder: '' });
 
-  // 自訂對話框狀態
   const [dialog, setDialog] = useState({ isOpen: false, title: '', message: '', type: 'alert', onConfirm: null });
 
   // --- 初始化設定 ---
@@ -105,14 +96,8 @@ export default function App() {
     }
 
     if (savedTodayBatches) setTodayBatches(JSON.parse(savedTodayBatches));
-    if (savedRecorder) {
-      setRecorderName(savedRecorder);
-      setRetroData(prev => ({ ...prev, recorder: savedRecorder }));
-    }
-    if (savedStore) {
-      setStoreName(savedStore);
-      setRetroData(prev => ({ ...prev, store: savedStore }));
-    }
+    if (savedRecorder) { setRecorderName(savedRecorder); setRetroData(prev => ({ ...prev, recorder: savedRecorder })); }
+    if (savedStore) { setStoreName(savedStore); setRetroData(prev => ({ ...prev, store: savedStore })); }
   }, []);
 
   // --- 存檔至 LocalStorage ---
@@ -123,7 +108,6 @@ export default function App() {
     localStorage.setItem('kitchen_storeName', storeName);
   }, [activeItems, todayBatches, recorderName, storeName]);
 
-  // --- 功能函數 ---
   const handleInputChange = (id, val) => setInputs(prev => ({ ...prev, [id]: val }));
   const handleRetroInputChange = (id, val) => setRetroInputs(prev => ({ ...prev, [id]: val }));
   const showAlert = (title, message) => setDialog({ isOpen: true, title, message, type: 'alert', onConfirm: null });
@@ -138,71 +122,45 @@ export default function App() {
   const handleBulkAddBatch = () => {
     if (!recorderName.trim()) { showAlert("提示", "請先填寫紀錄人員姓名！"); return; }
     if (!batchTime) { showAlert("提示", "請設定出爐時間！"); return; }
-
     const newBatches = [];
     Object.keys(inputs).forEach(id => {
       const qty = parseInt(inputs[id], 10);
       if (qty && qty > 0) {
         const item = activeItems.find(i => i.id === id);
-        if (item) {
-          newBatches.push({
-            id: `${Date.now()}-${id}`, itemId: item.id, name: item.name, category: item.category,
-            unit: item.unit, time: batchTime, qty: qty, recorder: recorderName
-          });
-        }
+        if (item) newBatches.push({ id: `${Date.now()}-${id}`, itemId: item.id, name: item.name, category: item.category, unit: item.unit, time: batchTime, qty: qty, recorder: recorderName });
       }
     });
-
     if (newBatches.length === 0) { showAlert("提示", "請至少輸入一個品項的數量！"); return; }
     setTodayBatches(prev => [...newBatches, ...prev]);
     setInputs({});
   };
 
-  const handleDeleteBatch = (batchId) => {
-    showConfirm("刪除確認", "確定要刪除這筆紀錄嗎？", () => {
-      setTodayBatches(prev => prev.filter(b => b.id !== batchId));
-    });
-  };
+  const handleDeleteBatch = (batchId) => { showConfirm("刪除確認", "確定要刪除這筆紀錄嗎？", () => { setTodayBatches(prev => prev.filter(b => b.id !== batchId)); }); };
 
   const handleAddNewItem = () => {
     if (!newItemData.name.trim()) return;
-    const newItem = { id: `ltd-${Date.now()}`, category: newItemData.category, name: newItemData.name, unit: newItemData.unit, isLimited: true };
-    setActiveItems(prev => [...prev, newItem]);
+    setActiveItems(prev => [...prev, { id: `ltd-${Date.now()}`, category: newItemData.category, name: newItemData.name, unit: newItemData.unit, isLimited: true }]);
     setNewItemModalOpen(false);
     setNewItemData({ name: '', category: '限定品', unit: '份' });
   };
 
   const handleDailySettlement = () => {
     if (todayBatches.length === 0) { showAlert("提示", "今日尚無時段紀錄可結算！"); return; }
-
     showConfirm("結算確認", `確定要為「${storeName}」執行當日結算嗎？\n結算後將保留各時段明細，並同步至雲端資料庫。`, async () => {
       const todayStr = new Date().toISOString().split('T')[0];
-      const recordsArray = todayBatches;
-
       try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'append', date: todayStr, store: storeName, recorder: recorderName, data: recordsArray })
-        });
+        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'append', date: todayStr, store: storeName, recorder: recorderName, data: todayBatches }) });
       } catch (error) { console.error('上傳 Google Sheets 失敗:', error); }
 
       const newHistory = [...history];
       const existingIdx = newHistory.findIndex(h => h.date === todayStr && h.store === storeName);
-      
-      if (existingIdx >= 0) {
-        newHistory[existingIdx].records = [...newHistory[existingIdx].records, ...recordsArray];
-      } else {
-        newHistory.push({ date: todayStr, store: storeName, records: recordsArray });
-      }
+      if (existingIdx >= 0) newHistory[existingIdx].records = [...newHistory[existingIdx].records, ...todayBatches];
+      else newHistory.push({ date: todayStr, store: storeName, records: todayBatches });
       
       newHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
       setHistory(newHistory);
-      localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
-
       setTodayBatches([]);
-      const currentLimitedItems = activeItems.filter(item => item.isLimited);
-      setActiveItems([...BASELINE_ITEMS, ...currentLimitedItems]); 
+      setActiveItems([...BASELINE_ITEMS, ...activeItems.filter(item => item.isLimited)]); 
       showAlert("成功", "當日結算完成！資料已同步存入 Google Sheets。");
     });
   };
@@ -216,12 +174,7 @@ export default function App() {
       const qty = parseInt(retroInputs[id], 10);
       if (qty && qty > 0) {
         const item = activeItems.find(i => i.id === id);
-        if (item) {
-          newBatches.push({
-            id: `retro-${Date.now()}-${id}`, itemId: item.id, name: item.name, category: item.category,
-            unit: item.unit, time: retroData.time, qty: qty, recorder: `${retroData.recorder}(補登)`
-          });
-        }
+        if (item) newBatches.push({ id: `retro-${Date.now()}-${id}`, itemId: item.id, name: item.name, category: item.category, unit: item.unit, time: retroData.time, qty: qty, recorder: `${retroData.recorder}(補登)` });
       }
     });
 
@@ -229,73 +182,44 @@ export default function App() {
 
     showConfirm("補登確認", `確定要將這些資料補登至 ${retroData.date} (${retroData.store}) 嗎？\n資料將會同步上傳至雲端資料庫。`, async () => {
       try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'append', date: retroData.date, store: retroData.store, recorder: `${retroData.recorder}(補登)`, data: newBatches })
-        });
+        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'append', date: retroData.date, store: retroData.store, recorder: `${retroData.recorder}(補登)`, data: newBatches }) });
       } catch (error) { console.error('補登上傳失敗:', error); }
 
       const newHistory = [...history];
       const existingIdx = newHistory.findIndex(h => h.date === retroData.date && h.store === retroData.store);
-      
-      if (existingIdx >= 0) {
-        newHistory[existingIdx].records = [...newHistory[existingIdx].records, ...newBatches];
-      } else {
-        newHistory.push({ date: retroData.date, store: retroData.store, records: newBatches });
-      }
+      if (existingIdx >= 0) newHistory[existingIdx].records = [...newHistory[existingIdx].records, ...newBatches];
+      else newHistory.push({ date: retroData.date, store: retroData.store, records: newBatches });
       
       newHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
       setHistory(newHistory);
-      localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
-
       setRetroModalOpen(false);
       setRetroInputs({});
       showAlert("成功", "歷史紀錄補登完成！");
     });
   };
 
-  // 🌟 [升級同步功能]：雙向同步刪除整天紀錄
   const handleDeleteHistoryDay = (date, store) => {
     showConfirm("刪除確認", `確定要同步移除 ${date} (${store}) 的所有紀錄嗎？\n\n⚠️ 注意：這將同時刪除網頁前台與 Google 雲端試算表上的資料！`, async () => {
-      // 1. 清除本地畫面
       const newHistory = history.filter(h => !(h.date === date && h.store === store));
       setHistory(newHistory);
       localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
-      
-      // 2. 呼叫 API 清除雲端試算表對應資料
       try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'delete_day', date: date, store: store })
-        });
+        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'delete_day', date: date, store: store }) });
       } catch (error) { console.error('刪除雲端失敗:', error); }
-      
       showAlert("成功", `已同步移除 ${date} 該門市的所有紀錄。`);
     });
   };
 
-  // 🌟 [升級同步功能]：雙向同步刪除單筆紀錄
   const handleDeleteHistoryRecord = (date, store, recIndex, recordName, time) => {
     showConfirm("刪除單筆紀錄", `確定要同步移除 ${date} 的「${recordName}」嗎？\n(移除後圖表與 Google 試算表會自動修正)`, async () => {
-      // 1. 清除本地畫面
       const newHistory = history.map(day => {
-        if (day.date === date && day.store === store) {
-          return { ...day, records: day.records.filter((_, idx) => idx !== recIndex) };
-        }
+        if (day.date === date && day.store === store) return { ...day, records: day.records.filter((_, idx) => idx !== recIndex) };
         return day;
       }).filter(day => day.records.length > 0); 
       setHistory(newHistory);
       localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
-
-      // 2. 呼叫 API 清除雲端單筆資料
       try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'delete_record', date: date, store: store, name: recordName, time: time })
-        });
+        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'delete_record', date: date, store: store, name: recordName, time: time }) });
       } catch (error) { console.error('刪除單筆雲端失敗:', error); }
     });
   };
@@ -303,9 +227,7 @@ export default function App() {
   const handleClearHistory = () => {
     if (history.length === 0) { showAlert("提示", "目前沒有歷史資料可以清除。"); return; }
     showConfirm("⚠️ 嚴重警告", "確定要「去除目前所有紀錄」嗎？\n此動作將清空所有歷史結算資料且無法復原！(包含雲端資料庫)", async () => {
-      try {
-        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'clear' }) });
-      } catch (error) { console.error('清除 Google Sheets 失敗:', error); }
+      try { await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'clear' }) }); } catch (error) { }
       setHistory([]); localStorage.removeItem('kitchen_history');
       showAlert("成功", "所有歷史紀錄及雲端資料庫已清空。");
     });
@@ -315,83 +237,79 @@ export default function App() {
     let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
     csvContent += "日期,店別,出爐時間,類別,品項,數量,單位\n";
     history.forEach(day => {
-      const dayStore = day.store || '未指定';
-      day.records.forEach(rec => {
-        csvContent += `${day.date},${dayStore},${rec.time || '加總紀錄'},${rec.category},${rec.name},${rec.qty},${rec.unit}\n`;
-      });
+      day.records.forEach(rec => { csvContent += `${day.date},${day.store || '未指定'},${rec.time || '加總紀錄'},${rec.category},${rec.name},${rec.qty},${rec.unit}\n`; });
     });
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", encodeURI(csvContent));
     link.setAttribute("download", `熟食產能紀錄_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // --- 衍生資料 ---
   const groupedItems = useMemo(() => {
     const groups = {};
-    activeItems.forEach(item => {
-      if (!groups[item.category]) groups[item.category] = [];
-      groups[item.category].push(item);
-    });
+    activeItems.forEach(item => { if (!groups[item.category]) groups[item.category] = []; groups[item.category].push(item); });
     return groups;
   }, [activeItems]);
 
   const todaySummary = useMemo(() => {
     const summary = {};
-    todayBatches.forEach(batch => {
-      if (!summary[batch.itemId]) summary[batch.itemId] = { ...batch, qty: 0 };
-      summary[batch.itemId].qty += batch.qty;
-    });
+    todayBatches.forEach(batch => { if (!summary[batch.itemId]) summary[batch.itemId] = { ...batch, qty: 0 }; summary[batch.itemId].qty += batch.qty; });
     return Object.values(summary);
   }, [todayBatches]);
 
   const groupedTodaySummary = useMemo(() => {
     const groups = {};
-    todaySummary.forEach(item => {
-      if (!groups[item.category]) groups[item.category] = [];
-      groups[item.category].push(item);
-    });
+    todaySummary.forEach(item => { if (!groups[item.category]) groups[item.category] = []; groups[item.category].push(item); });
     return groups;
   }, [todaySummary]);
 
   const groupedBatchesByTime = useMemo(() => {
     const groups = {};
-    todayBatches.forEach(batch => {
-      if (!groups[batch.time]) groups[batch.time] = [];
-      groups[batch.time].push(batch);
-    });
+    todayBatches.forEach(batch => { if (!groups[batch.time]) groups[batch.time] = []; groups[batch.time].push(batch); });
     return Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(time => ({ time, records: groups[time] }));
   }, [todayBatches]);
 
+  // 🌟【關鍵修復】精準加總同日的多筆歷史紀錄 (解決圖表爆量亂竄問題)
   const chartData = useMemo(() => {
-    if (chartView === 'total') {
-      return history.map(day => {
-        const dataPoint = { date: day.date, '便當': 0, '炸物': 0, '烤物': 0, '限定品': 0 };
-        day.records.forEach(rec => {
-          if (dataPoint[rec.category] !== undefined) dataPoint[rec.category] += rec.qty;
-          else dataPoint['限定品'] += rec.qty;
-        });
-        return dataPoint;
-      });
-    } else {
-      return history.map(day => {
-        const dataPoint = { date: day.date };
-        day.records.forEach(rec => {
-          if (rec.category === chartView || (chartView === '限定品' && rec.isLimited)) {
-            dataPoint[rec.name] = (dataPoint[rec.name] || 0) + rec.qty;
+    const dailyAggregated = {};
+
+    history.forEach(day => {
+      // 若該日期尚未建立，初始化資料結構
+      if (!dailyAggregated[day.date]) {
+        dailyAggregated[day.date] = { date: day.date };
+        if (chartView === 'total') {
+          dailyAggregated[day.date]['便當'] = 0;
+          dailyAggregated[day.date]['炸物'] = 0;
+          dailyAggregated[day.date]['烤物'] = 0;
+          dailyAggregated[day.date]['限定品'] = 0;
+        }
+      }
+
+      // 將資料完美疊加進對應的日期
+      day.records.forEach(rec => {
+        if (chartView === 'total') {
+          if (dailyAggregated[day.date][rec.category] !== undefined) {
+            dailyAggregated[day.date][rec.category] += rec.qty;
+          } else {
+            dailyAggregated[day.date]['限定品'] += rec.qty;
           }
-        });
-        return dataPoint;
+        } else {
+          if (rec.category === chartView || (chartView === '限定品' && rec.isLimited)) {
+            dailyAggregated[day.date][rec.name] = (dailyAggregated[day.date][rec.name] || 0) + rec.qty;
+          }
+        }
       });
-    }
+    });
+
+    return Object.values(dailyAggregated).sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [history, chartView]);
 
+  // 🌟【附帶修復】確保所有品項的線條都能正確生成
   const chartLines = useMemo(() => {
     if (chartData.length === 0) return [];
-    return Object.keys(chartData[0]).filter(k => k !== 'date');
+    const keys = new Set();
+    chartData.forEach(d => { Object.keys(d).forEach(k => { if (k !== 'date') keys.add(k); }); });
+    return Array.from(keys);
   }, [chartData]);
 
   // 匯出 PNG
@@ -426,7 +344,6 @@ export default function App() {
   };
 
 
-  // --- UI 元件渲染 ---
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10">
       <nav className="bg-white shadow-sm sticky top-0 z-10">
@@ -589,7 +506,6 @@ export default function App() {
                         <td className="px-6 py-3">{rec.name}</td>
                         <td className="px-6 py-3 font-bold">{rec.qty} {rec.unit}</td>
                         <td className="px-6 py-3 text-center">
-                          {/* 傳遞 rec.time 以便精準找到雲端那一列 */}
                           <button onClick={() => handleDeleteHistoryRecord(day.date, day.store, i, rec.name, rec.time)} className="text-slate-400 hover:text-red-500 p-1 rounded-md hover:bg-red-50 transition-colors" title="刪除此筆紀錄">
                             <X className="w-4 h-4" />
                           </button>
@@ -634,7 +550,6 @@ export default function App() {
             </div>
             
             <div className="overflow-y-auto p-6 flex-1 bg-slate-50/50">
-              {/* 補登基本資料 */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                 <div><label className="text-xs text-slate-500 mb-1 block">補登日期 *</label><input type="date" value={retroData.date} onChange={e => setRetroData({...retroData, date: e.target.value})} className="w-full border rounded-md p-2 text-sm outline-none bg-indigo-50"/></div>
                 <div><label className="text-xs text-slate-500 mb-1 block">時段 *</label><input type="time" value={retroData.time} onChange={e => setRetroData({...retroData, time: e.target.value})} className="w-full border rounded-md p-2 text-sm outline-none"/></div>
@@ -642,7 +557,6 @@ export default function App() {
                 <div><label className="text-xs text-slate-500 mb-1 block">紀錄人 *</label><input type="text" value={retroData.recorder} onChange={e => setRetroData({...retroData, recorder: e.target.value})} placeholder="姓名" className="w-full border rounded-md p-2 text-sm outline-none"/></div>
               </div>
 
-              {/* 補登品項輸入清單 */}
               <div className="space-y-4">
                 {Object.keys(groupedItems).map(category => (
                   <div key={`retro-${category}`} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
@@ -650,11 +564,8 @@ export default function App() {
                     <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {groupedItems[category].map(item => (
                         <div key={`retro-item-${item.id}`} className="flex items-center justify-between border rounded p-2 relative">
-                          {/* 補登畫面也加上刪除按鈕 */}
                           {item.isLimited && (
-                             <button onClick={() => handleRemoveLimitedItem(item.id)} className="absolute -left-2 -top-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 border border-red-200" title="刪除此限定品">
-                               <X className="w-3 h-3" />
-                             </button>
+                             <button onClick={() => handleRemoveLimitedItem(item.id)} className="absolute -left-2 -top-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 border border-red-200" title="刪除此限定品"><X className="w-3 h-3" /></button>
                           )}
                           <span className="text-sm text-slate-700 font-medium truncate pr-2 ml-1">{item.name}</span>
                           <input type="number" min="0" placeholder="0" value={retroInputs[item.id] || ''} onChange={(e) => handleRetroInputChange(item.id, e.target.value)} className="w-14 border rounded px-1 py-1 text-sm text-center outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50" />
