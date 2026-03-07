@@ -41,6 +41,9 @@ const CATEGORY_COLORS = {
 
 const CHART_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
 
+// 🌟🌟🌟 請將您剛剛部署取得的「網頁應用程式網址」貼在下方的引號內 (取代原本的) 🌟🌟🌟
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6IwmqfbSP1m0Xhsw782RqHxk-BGykMZ9XXOGdHPs3FUMReuQ5lb5PSBUdY8qP6nRl/exec';
+
 export default function App() {
   // --- 狀態管理 ---
   const [activeTab, setActiveTab] = useState('record'); 
@@ -93,7 +96,6 @@ export default function App() {
     if (savedHistory) setHistory(JSON.parse(savedHistory));
     else setHistory([]);
 
-    // 智慧合併菜單邏輯
     if (savedActiveItems) {
       const parsedItems = JSON.parse(savedActiveItems);
       const customLimitedItems = parsedItems.filter(item => item.isLimited);
@@ -127,14 +129,12 @@ export default function App() {
   const showAlert = (title, message) => setDialog({ isOpen: true, title, message, type: 'alert', onConfirm: null });
   const showConfirm = (title, message, onConfirm) => setDialog({ isOpen: true, title, message, type: 'confirm', onConfirm });
 
-  // 移除自訂限定品
   const handleRemoveLimitedItem = (itemId) => {
     showConfirm("刪除確認", "確定要從菜單中移除此限定品嗎？\n(過去已結算的歷史紀錄不受影響)", () => {
       setActiveItems(prev => prev.filter(item => item.id !== itemId));
     });
   };
 
-  // 批量新增出爐批次
   const handleBulkAddBatch = () => {
     if (!recorderName.trim()) { showAlert("提示", "請先填寫紀錄人員姓名！"); return; }
     if (!batchTime) { showAlert("提示", "請設定出爐時間！"); return; }
@@ -154,7 +154,6 @@ export default function App() {
     });
 
     if (newBatches.length === 0) { showAlert("提示", "請至少輸入一個品項的數量！"); return; }
-
     setTodayBatches(prev => [...newBatches, ...prev]);
     setInputs({});
   };
@@ -173,7 +172,6 @@ export default function App() {
     setNewItemData({ name: '', category: '限定品', unit: '份' });
   };
 
-  // 每日結算存檔
   const handleDailySettlement = () => {
     if (todayBatches.length === 0) { showAlert("提示", "今日尚無時段紀錄可結算！"); return; }
 
@@ -182,11 +180,10 @@ export default function App() {
       const recordsArray = todayBatches;
 
       try {
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6IwmqfbSP1m0Xhsw782RqHxk-BGykMZ9XXOGdHPs3FUMReuQ5lb5PSBUdY8qP6nRl/exec';
         await fetch(GOOGLE_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ date: todayStr, store: storeName, recorder: recorderName, data: recordsArray })
+          body: JSON.stringify({ action: 'append', date: todayStr, store: storeName, recorder: recorderName, data: recordsArray })
         });
       } catch (error) { console.error('上傳 Google Sheets 失敗:', error); }
 
@@ -204,16 +201,12 @@ export default function App() {
       localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
 
       setTodayBatches([]);
-      
-      // 結算後保留限定品
       const currentLimitedItems = activeItems.filter(item => item.isLimited);
       setActiveItems([...BASELINE_ITEMS, ...currentLimitedItems]); 
-      
       showAlert("成功", "當日結算完成！資料已同步存入 Google Sheets。");
     });
   };
 
-  // 補登歷史紀錄送出
   const handleRetroSubmit = () => {
     if (!retroData.recorder.trim()) { showAlert("提示", "請填寫紀錄人員姓名！"); return; }
     if (!retroData.date || !retroData.time) { showAlert("提示", "日期與時間不可為空！"); return; }
@@ -236,11 +229,10 @@ export default function App() {
 
     showConfirm("補登確認", `確定要將這些資料補登至 ${retroData.date} (${retroData.store}) 嗎？\n資料將會同步上傳至雲端資料庫。`, async () => {
       try {
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6IwmqfbSP1m0Xhsw782RqHxk-BGykMZ9XXOGdHPs3FUMReuQ5lb5PSBUdY8qP6nRl/exec';
         await fetch(GOOGLE_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ date: retroData.date, store: retroData.store, recorder: `${retroData.recorder}(補登)`, data: newBatches })
+          body: JSON.stringify({ action: 'append', date: retroData.date, store: retroData.store, recorder: `${retroData.recorder}(補登)`, data: newBatches })
         });
       } catch (error) { console.error('補登上傳失敗:', error); }
 
@@ -260,6 +252,62 @@ export default function App() {
       setRetroModalOpen(false);
       setRetroInputs({});
       showAlert("成功", "歷史紀錄補登完成！");
+    });
+  };
+
+  // 🌟 [升級同步功能]：雙向同步刪除整天紀錄
+  const handleDeleteHistoryDay = (date, store) => {
+    showConfirm("刪除確認", `確定要同步移除 ${date} (${store}) 的所有紀錄嗎？\n\n⚠️ 注意：這將同時刪除網頁前台與 Google 雲端試算表上的資料！`, async () => {
+      // 1. 清除本地畫面
+      const newHistory = history.filter(h => !(h.date === date && h.store === store));
+      setHistory(newHistory);
+      localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
+      
+      // 2. 呼叫 API 清除雲端試算表對應資料
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'delete_day', date: date, store: store })
+        });
+      } catch (error) { console.error('刪除雲端失敗:', error); }
+      
+      showAlert("成功", `已同步移除 ${date} 該門市的所有紀錄。`);
+    });
+  };
+
+  // 🌟 [升級同步功能]：雙向同步刪除單筆紀錄
+  const handleDeleteHistoryRecord = (date, store, recIndex, recordName, time) => {
+    showConfirm("刪除單筆紀錄", `確定要同步移除 ${date} 的「${recordName}」嗎？\n(移除後圖表與 Google 試算表會自動修正)`, async () => {
+      // 1. 清除本地畫面
+      const newHistory = history.map(day => {
+        if (day.date === date && day.store === store) {
+          return { ...day, records: day.records.filter((_, idx) => idx !== recIndex) };
+        }
+        return day;
+      }).filter(day => day.records.length > 0); 
+      setHistory(newHistory);
+      localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
+
+      // 2. 呼叫 API 清除雲端單筆資料
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'delete_record', date: date, store: store, name: recordName, time: time })
+        });
+      } catch (error) { console.error('刪除單筆雲端失敗:', error); }
+    });
+  };
+
+  const handleClearHistory = () => {
+    if (history.length === 0) { showAlert("提示", "目前沒有歷史資料可以清除。"); return; }
+    showConfirm("⚠️ 嚴重警告", "確定要「去除目前所有紀錄」嗎？\n此動作將清空所有歷史結算資料且無法復原！(包含雲端資料庫)", async () => {
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'clear' }) });
+      } catch (error) { console.error('清除 Google Sheets 失敗:', error); }
+      setHistory([]); localStorage.removeItem('kitchen_history');
+      showAlert("成功", "所有歷史紀錄及雲端資料庫已清空。");
     });
   };
 
@@ -346,7 +394,7 @@ export default function App() {
     return Object.keys(chartData[0]).filter(k => k !== 'date');
   }, [chartData]);
 
-  // 匯出 PNG (總結/明細) 邏輯...
+  // 匯出 PNG
   const generatePNG = async (elementId, filename) => {
     setIsExporting(true);
     try {
@@ -377,17 +425,6 @@ export default function App() {
     showConfirm("出圖確認", "確定要產生並下載「時段出爐明細」嗎？", () => generatePNG('batch-report-template', `時段出爐明細_${new Date().toISOString().split('T')[0]}.png`));
   };
 
-  const handleClearHistory = () => {
-    if (history.length === 0) { showAlert("提示", "目前沒有歷史資料可以清除。"); return; }
-    showConfirm("⚠️ 嚴重警告", "確定要「去除目前所有紀錄」嗎？\n此動作將清空所有歷史結算資料且無法復原！(包含雲端資料庫)", async () => {
-      try {
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6IwmqfbSP1m0Xhsw782RqHxk-BGykMZ9XXOGdHPs3FUMReuQ5lb5PSBUdY8qP6nRl/exec';
-        await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'clear' }) });
-      } catch (error) { console.error('清除 Google Sheets 失敗:', error); }
-      setHistory([]); localStorage.removeItem('kitchen_history');
-      showAlert("成功", "所有歷史紀錄及雲端資料庫已清空。");
-    });
-  };
 
   // --- UI 元件渲染 ---
   return (
@@ -530,7 +567,37 @@ export default function App() {
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                <div className="px-6 py-4 border-b bg-slate-50 font-bold">歷史結算明細</div>
               <div className="overflow-x-auto max-h-[400px]">
-                <table className="w-full text-sm text-left"><thead className="text-xs bg-white sticky top-0"><tr><th className="px-6 py-3">日期</th><th className="px-6 py-3">店別</th><th className="px-6 py-3">時段</th><th className="px-6 py-3">品項</th><th className="px-6 py-3">數量</th></tr></thead><tbody className="divide-y">{history.slice().reverse().flatMap((day) => day.records.map((rec, i) => <tr key={i}><td className="px-6 py-3">{i === 0 ? day.date : ''}</td><td className="px-6 py-3">{day.store}</td><td className="px-6 py-3">{rec.time}</td><td className="px-6 py-3">{rec.name}</td><td className="px-6 py-3 font-bold">{rec.qty} {rec.unit}</td></tr>))}</tbody></table>
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs bg-white sticky top-0">
+                    <tr>
+                      <th className="px-6 py-3">日期</th>
+                      <th className="px-6 py-3">店別</th>
+                      <th className="px-6 py-3">時段</th>
+                      <th className="px-6 py-3">品項</th>
+                      <th className="px-6 py-3">數量</th>
+                      <th className="px-6 py-3 text-center">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {history.slice().reverse().flatMap((day) => day.records.map((rec, i) => (
+                      <tr key={`${day.date}-${day.store}-${i}`}>
+                        <td className="px-6 py-3">
+                          {i === 0 ? <div className="flex items-center gap-2">{day.date} <button onClick={() => handleDeleteHistoryDay(day.date, day.store)} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-full" title="刪除此日畫面的紀錄"><Trash2 className="w-3 h-3" /></button></div> : ''}
+                        </td>
+                        <td className="px-6 py-3">{day.store}</td>
+                        <td className="px-6 py-3">{rec.time}</td>
+                        <td className="px-6 py-3">{rec.name}</td>
+                        <td className="px-6 py-3 font-bold">{rec.qty} {rec.unit}</td>
+                        <td className="px-6 py-3 text-center">
+                          {/* 傳遞 rec.time 以便精準找到雲端那一列 */}
+                          <button onClick={() => handleDeleteHistoryRecord(day.date, day.store, i, rec.name, rec.time)} className="text-slate-400 hover:text-red-500 p-1 rounded-md hover:bg-red-50 transition-colors" title="刪除此筆紀錄">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
