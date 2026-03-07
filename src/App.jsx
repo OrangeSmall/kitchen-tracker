@@ -214,16 +214,27 @@ export default function App() {
         result.forEach(row => {
           if (!row.date || !row.name) return; // 避免空行
 
-          // 1. 強制過濾冗長日期字串 (例如 "2026-03-05T16:00:00.000Z" -> "2026-03-05")
+          // 🛡️ 1. 鐵壁防禦：強制轉換為 YYYY-MM-DD
           let cleanDate = String(row.date);
-          if (cleanDate.includes('T')) cleanDate = cleanDate.split('T')[0];
-          cleanDate = cleanDate.replace(/\//g, '-'); // 保持底層 YYYY-MM-DD 格式以利同步刪除
+          const parsedDate = new Date(cleanDate);
+          if (!isNaN(parsedDate.getTime())) {
+            const yyyy = parsedDate.getFullYear();
+            // 過濾掉之前因為欄位錯位產生的 1899 年幽靈資料
+            if (yyyy < 2020) return; 
+            
+            const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(parsedDate.getDate()).padStart(2, '0');
+            cleanDate = `${yyyy}-${mm}-${dd}`;
+          } else {
+            if (cleanDate.includes('T')) cleanDate = cleanDate.split('T')[0];
+            cleanDate = cleanDate.replace(/\//g, '-');
+          }
 
-          // 2. 強制過濾冗長時間字串 (例如 "1899-12-30T03:10:00.000Z" -> "11:10")
+          // 🛡️ 2. 鐵壁防禦：強制轉換為 HH:mm
           let cleanTime = String(row.time);
-          if (cleanTime.includes('T')) {
+          if (cleanTime.includes('T') || cleanTime.length > 10) {
             const tDate = new Date(cleanTime);
-            if (!isNaN(tDate)) {
+            if (!isNaN(tDate.getTime())) {
                cleanTime = `${tDate.getHours().toString().padStart(2, '0')}:${tDate.getMinutes().toString().padStart(2, '0')}`;
             }
           }
@@ -237,7 +248,7 @@ export default function App() {
             time: cleanTime,
             category: row.category,
             name: row.name,
-            qty: Number(row.qty),
+            qty: Number(row.qty) || 0,
             unit: row.unit,
             // 恢復：保留從雲端抓下來時包含的 (補登) 文字，不再將其消除
             recorder: String(row.recorder || '')
