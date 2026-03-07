@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { ClipboardList, BarChart3, Plus, Save, Download, Trash2, Clock, User, CheckCircle2, AlertCircle, Utensils, Smartphone, Monitor, Image as ImageIcon, Store, CalendarPlus, X } from 'lucide-react';
+import { ClipboardList, BarChart3, Plus, Save, Download, Trash2, Clock, User, CheckCircle2, AlertCircle, Utensils, Smartphone, Monitor, Image as ImageIcon, Store, CalendarPlus, X, RefreshCw } from 'lucide-react';
 
 // --- 初始資料定義 ---
 const BASELINE_ITEMS = [
@@ -61,6 +61,7 @@ export default function App() {
   const [chartView, setChartView] = useState('total'); 
   const [viewMode, setViewMode] = useState('mobile'); 
   const [isExporting, setIsExporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const [retroModalOpen, setRetroModalOpen] = useState(false);
   const [retroInputs, setRetroInputs] = useState({});
@@ -174,6 +175,7 @@ export default function App() {
       const qty = parseInt(retroInputs[id], 10);
       if (qty && qty > 0) {
         const item = activeItems.find(i => i.id === id);
+        // 恢復：保留 (補登) 字眼
         if (item) newBatches.push({ id: `retro-${Date.now()}-${id}`, itemId: item.id, name: item.name, category: item.category, unit: item.unit, time: retroData.time, qty: qty, recorder: `${retroData.recorder}(補登)` });
       }
     });
@@ -182,6 +184,7 @@ export default function App() {
 
     showConfirm("補登確認", `確定要將這些資料補登至 ${retroData.date} (${retroData.store}) 嗎？\n資料將會同步上傳至雲端資料庫。`, async () => {
       try {
+        // 恢復：上傳時名字加上 (補登)
         await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'append', date: retroData.date, store: retroData.store, recorder: `${retroData.recorder}(補登)`, data: newBatches }) });
       } catch (error) { console.error('補登上傳失敗:', error); }
 
@@ -198,6 +201,62 @@ export default function App() {
     });
   };
 
+  // 🌟 終極升級：強制從雲端拉取正確資料，並套用自動格式濾波器
+  const handleSyncFromCloud = async () => {
+    showConfirm("同步確認", "確定要從雲端下載最新資料嗎？\n這將會以雲端試算表的資料為準，覆蓋目前的歷史明細圖表。\n\n⚠️ 放心，這絕對不會影響您「今日正在現場紀錄」的未結算資料！", async () => {
+      setIsSyncing(true);
+      try {
+        const response = await fetch(GOOGLE_SCRIPT_URL);
+        const result = await response.json();
+
+        // 重組資料給 App 使用，並強制清洗日期與時間格式
+        const newHistoryMap = {};
+        result.forEach(row => {
+          if (!row.date || !row.name) return; // 避免空行
+
+          // 1. 強制過濾冗長日期字串 (例如 "2026-03-05T16:00:00.000Z" -> "2026-03-05")
+          let cleanDate = String(row.date);
+          if (cleanDate.includes('T')) cleanDate = cleanDate.split('T')[0];
+          cleanDate = cleanDate.replace(/\//g, '-'); // 保持底層 YYYY-MM-DD 格式以利同步刪除
+
+          // 2. 強制過濾冗長時間字串 (例如 "1899-12-30T03:10:00.000Z" -> "11:10")
+          let cleanTime = String(row.time);
+          if (cleanTime.includes('T')) {
+            const tDate = new Date(cleanTime);
+            if (!isNaN(tDate)) {
+               cleanTime = `${tDate.getHours().toString().padStart(2, '0')}:${tDate.getMinutes().toString().padStart(2, '0')}`;
+            }
+          }
+
+          const key = `${cleanDate}-${row.store}`;
+          if (!newHistoryMap[key]) {
+            newHistoryMap[key] = { date: cleanDate, store: row.store, records: [] };
+          }
+          newHistoryMap[key].records.push({
+            id: `sync-${Date.now()}-${Math.random()}`,
+            time: cleanTime,
+            category: row.category,
+            name: row.name,
+            qty: Number(row.qty),
+            unit: row.unit,
+            // 恢復：保留從雲端抓下來時包含的 (補登) 文字，不再將其消除
+            recorder: String(row.recorder || '')
+          });
+        });
+
+        const newHistory = Object.values(newHistoryMap).sort((a, b) => new Date(a.date) - new Date(b.date));
+        setHistory(newHistory);
+        localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
+        showAlert("成功", "✅ 已成功從雲端同步最新資料！格式與圖表已完全校正。");
+      } catch (error) {
+        console.error('同步失敗:', error);
+        showAlert("錯誤", "同步失敗！請確認有正確更新 Google 試算表的 doGet 程式碼並「建立新版本」。");
+      } finally {
+        setIsSyncing(false);
+      }
+    });
+  };
+
   const handleDeleteHistoryDay = (date, store) => {
     showConfirm("刪除確認", `確定要同步移除 ${date} (${store}) 的所有紀錄嗎？\n\n⚠️ 注意：這將同時刪除網頁前台與 Google 雲端試算表上的資料！`, async () => {
       const newHistory = history.filter(h => !(h.date === date && h.store === store));
@@ -206,12 +265,12 @@ export default function App() {
       try {
         await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'delete_day', date: date, store: store }) });
       } catch (error) { console.error('刪除雲端失敗:', error); }
-      showAlert("成功", `已同步移除 ${date} 該門市的所有紀錄。`);
+      showAlert("成功", `已同步移除 ${date.replace(/-/g, '/')} 該門市的所有紀錄。`);
     });
   };
 
   const handleDeleteHistoryRecord = (date, store, recIndex, recordName, time) => {
-    showConfirm("刪除單筆紀錄", `確定要同步移除 ${date} 的「${recordName}」嗎？\n(移除後圖表與 Google 試算表會自動修正)`, async () => {
+    showConfirm("刪除單筆紀錄", `確定要同步移除 ${date.replace(/-/g, '/')} 的「${recordName}」嗎？\n(移除後圖表與 Google 試算表會自動修正)`, async () => {
       const newHistory = history.map(day => {
         if (day.date === date && day.store === store) return { ...day, records: day.records.filter((_, idx) => idx !== recIndex) };
         return day;
@@ -237,7 +296,7 @@ export default function App() {
     let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
     csvContent += "日期,店別,出爐時間,類別,品項,數量,單位\n";
     history.forEach(day => {
-      day.records.forEach(rec => { csvContent += `${day.date},${day.store || '未指定'},${rec.time || '加總紀錄'},${rec.category},${rec.name},${rec.qty},${rec.unit}\n`; });
+      day.records.forEach(rec => { csvContent += `${day.date.replace(/-/g, '/')},${day.store || '未指定'},${rec.time || '加總紀錄'},${rec.category},${rec.name},${rec.qty},${rec.unit}\n`; });
     });
     const link = document.createElement("a");
     link.setAttribute("href", encodeURI(csvContent));
@@ -269,42 +328,41 @@ export default function App() {
     return Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(time => ({ time, records: groups[time] }));
   }, [todayBatches]);
 
-  // 🌟【關鍵修復】精準加總同日的多筆歷史紀錄 (解決圖表爆量亂竄問題)
   const chartData = useMemo(() => {
     const dailyAggregated = {};
 
     history.forEach(day => {
-      // 若該日期尚未建立，初始化資料結構
-      if (!dailyAggregated[day.date]) {
-        dailyAggregated[day.date] = { date: day.date };
+      // 視覺呈現使用 YYYY/MM/DD
+      const visualDate = day.date.replace(/-/g, '/');
+
+      if (!dailyAggregated[visualDate]) {
+        dailyAggregated[visualDate] = { date: visualDate };
         if (chartView === 'total') {
-          dailyAggregated[day.date]['便當'] = 0;
-          dailyAggregated[day.date]['炸物'] = 0;
-          dailyAggregated[day.date]['烤物'] = 0;
-          dailyAggregated[day.date]['限定品'] = 0;
+          dailyAggregated[visualDate]['便當'] = 0;
+          dailyAggregated[visualDate]['炸物'] = 0;
+          dailyAggregated[visualDate]['烤物'] = 0;
+          dailyAggregated[visualDate]['限定品'] = 0;
         }
       }
 
-      // 將資料完美疊加進對應的日期
       day.records.forEach(rec => {
         if (chartView === 'total') {
-          if (dailyAggregated[day.date][rec.category] !== undefined) {
-            dailyAggregated[day.date][rec.category] += rec.qty;
+          if (dailyAggregated[visualDate][rec.category] !== undefined) {
+            dailyAggregated[visualDate][rec.category] += rec.qty;
           } else {
-            dailyAggregated[day.date]['限定品'] += rec.qty;
+            dailyAggregated[visualDate]['限定品'] += rec.qty;
           }
         } else {
           if (rec.category === chartView || (chartView === '限定品' && rec.isLimited)) {
-            dailyAggregated[day.date][rec.name] = (dailyAggregated[day.date][rec.name] || 0) + rec.qty;
+            dailyAggregated[visualDate][rec.name] = (dailyAggregated[visualDate][rec.name] || 0) + rec.qty;
           }
         }
       });
     });
 
-    return Object.values(dailyAggregated).sort((a, b) => new Date(a.date) - new Date(b.date));
+    return Object.values(dailyAggregated).sort((a, b) => new Date(a.date.replace(/\//g, '-')) - new Date(b.date.replace(/\//g, '-')));
   }, [history, chartView]);
 
-  // 🌟【附帶修復】確保所有品項的線條都能正確生成
   const chartLines = useMemo(() => {
     if (chartData.length === 0) return [];
     const keys = new Set();
@@ -460,6 +518,13 @@ export default function App() {
               <h2 className="text-lg font-bold">產能趨勢分析</h2>
               <div className="flex flex-wrap gap-2">
                 <select value={chartView} onChange={(e) => setChartView(e.target.value)} className="bg-slate-50 border text-sm rounded-lg p-2 outline-none"><option value="total">總體類別</option><option value="便當">便當類</option><option value="炸物">炸物類</option><option value="烤物">烤物類</option><option value="限定品">限定品</option></select>
+                
+                {/* 🌟 新增：一鍵雲端同步按鈕 */}
+                <button onClick={handleSyncFromCloud} disabled={isSyncing} className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-medium hover:bg-emerald-100 flex items-center transition-colors disabled:opacity-50">
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? '同步中...' : '同步雲端'}
+                </button>
+
                 <button onClick={() => setRetroModalOpen(true)} className="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100 flex items-center"><CalendarPlus className="w-4 h-4 mr-2" />補登歷史紀錄</button>
                 <button onClick={handleExportCSV} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium flex items-center"><Download className="w-4 h-4 mr-2" />匯出CSV</button>
                 <button onClick={handleClearHistory} className="px-4 py-2 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-50 flex items-center"><Trash2 className="w-4 h-4 mr-1" />清空</button>
@@ -499,7 +564,8 @@ export default function App() {
                     {history.slice().reverse().flatMap((day) => day.records.map((rec, i) => (
                       <tr key={`${day.date}-${day.store}-${i}`}>
                         <td className="px-6 py-3">
-                          {i === 0 ? <div className="flex items-center gap-2">{day.date} <button onClick={() => handleDeleteHistoryDay(day.date, day.store)} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-full" title="刪除此日畫面的紀錄"><Trash2 className="w-3 h-3" /></button></div> : ''}
+                          {/* 視覺呈現皆換為乾淨的 YYYY/MM/DD */}
+                          {i === 0 ? <div className="flex items-center gap-2">{day.date.replace(/-/g, '/')} <button onClick={() => handleDeleteHistoryDay(day.date, day.store)} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-full" title="刪除此日畫面的紀錄"><Trash2 className="w-3 h-3" /></button></div> : ''}
                         </td>
                         <td className="px-6 py-3">{day.store}</td>
                         <td className="px-6 py-3">{rec.time}</td>
