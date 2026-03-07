@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { ClipboardList, BarChart3, Plus, Save, Download, Trash2, Clock, User, CheckCircle2, AlertCircle, Utensils, Smartphone, Monitor, Image as ImageIcon, Store, CalendarPlus } from 'lucide-react';
+import { ClipboardList, BarChart3, Plus, Save, Download, Trash2, Clock, User, CheckCircle2, AlertCircle, Utensils, Smartphone, Monitor, Image as ImageIcon, Store, CalendarPlus, X } from 'lucide-react';
 
 // --- 初始資料定義 ---
 const BASELINE_ITEMS = [
   { id: 'b1', category: '便當', name: '純雞', unit: '個' },
   { id: 'b2', category: '便當', name: '雞+魚', unit: '個' },
   { id: 'b3', category: '便當', name: '魚+魚', unit: '個' },
-  { id: 'b4', category: '便當', name: '薑汁豬肉丼', unit: '個' }, // 新增：薑汁豬肉丼
-  { id: 'b5', category: '便當', name: '和風牛肉丼', unit: '個' }, // 新增：和風牛肉丼
-  { id: 'b6', category: '便當', name: '排骨飯', unit: '個' },   // 新增：排骨飯
-  { id: 'b7', category: '便當', name: '其他品項', unit: '個' }, // 新增：其他品項
+  { id: 'b4', category: '便當', name: '薑汁豬肉丼', unit: '個' },
+  { id: 'b5', category: '便當', name: '和風牛肉丼', unit: '個' },
+  { id: 'b6', category: '便當', name: '排骨飯', unit: '個' },
+  { id: 'b7', category: '便當', name: '其他品項', unit: '個' },
   { id: 'f1', category: '炸物', name: '白身魚', unit: '份' },
   { id: 'f2', category: '炸物', name: '竹筴魚', unit: '份' },
   { id: 'f3', category: '炸物', name: '牛肉餅', unit: '份' },
@@ -18,8 +18,8 @@ const BASELINE_ITEMS = [
   { id: 'f5', category: '炸物', name: '厚蝦排', unit: '份' },
   { id: 'f6', category: '炸物', name: '炸牡蠣', unit: '份' },
   { id: 'f7', category: '炸物', name: '蟹味棒', unit: '份' },
-  { id: 'f8', category: '炸物', name: '咖哩可樂餅', unit: '份' }, // 新增：咖哩可樂餅
-  { id: 'f9', category: '炸物', name: '酥炸目光魚', unit: '份' }, // 新增：酥炸目光魚
+  { id: 'f8', category: '炸物', name: '咖哩可樂餅', unit: '份' },
+  { id: 'f9', category: '炸物', name: '酥炸目光魚', unit: '份' },
   { id: 'g1', category: '烤物', name: '魚肚', unit: '片' },
   { id: 'g2', category: '烤物', name: '魚頭', unit: '個' },
   { id: 'g3', category: '烤物', name: '鯖魚', unit: '片' },
@@ -33,10 +33,10 @@ const BASELINE_ITEMS = [
 ];
 
 const CATEGORY_COLORS = {
-  '便當': '#F59E0B', // Amber
-  '炸物': '#EF4444', // Red
-  '烤物': '#10B981', // Emerald
-  '限定品': '#8B5CF6' // Purple
+  '便當': '#F59E0B',
+  '炸物': '#EF4444',
+  '烤物': '#10B981',
+  '限定品': '#8B5CF6'
 };
 
 const CHART_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
@@ -126,6 +126,13 @@ export default function App() {
   const handleRetroInputChange = (id, val) => setRetroInputs(prev => ({ ...prev, [id]: val }));
   const showAlert = (title, message) => setDialog({ isOpen: true, title, message, type: 'alert', onConfirm: null });
   const showConfirm = (title, message, onConfirm) => setDialog({ isOpen: true, title, message, type: 'confirm', onConfirm });
+
+  // 移除自訂限定品
+  const handleRemoveLimitedItem = (itemId) => {
+    showConfirm("刪除確認", "確定要從菜單中移除此限定品嗎？\n(過去已結算的歷史紀錄不受影響)", () => {
+      setActiveItems(prev => prev.filter(item => item.id !== itemId));
+    });
+  };
 
   // 批量新增出爐批次
   const handleBulkAddBatch = () => {
@@ -446,9 +453,16 @@ export default function App() {
                     <div className="bg-slate-50 px-4 py-3 border-b flex items-center"><span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: CATEGORY_COLORS[category] || '#94a3b8' }}></span><h3 className="font-bold text-slate-700">{category}</h3></div>
                     <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {groupedItems[category].map(item => (
-                        <div key={item.id} className="border rounded-lg p-3 bg-white flex flex-col relative">
-                          {item.isLimited && <span className="absolute -top-2 -right-2 bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded border">限定</span>}
-                          <div className="text-sm font-bold text-slate-800 mb-1 truncate">{item.name}</div>
+                        <div key={item.id} className="border rounded-lg p-3 bg-white flex flex-col relative mt-2">
+                          {item.isLimited && (
+                            <>
+                              <span className="absolute -top-3 -right-2 bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded border">限定</span>
+                              <button onClick={() => handleRemoveLimitedItem(item.id)} className="absolute -top-3 -left-2 bg-red-100 text-red-600 rounded-full p-1.5 hover:bg-red-200 shadow-sm border border-red-200 transition-colors" title="刪除此限定品">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
+                          <div className="text-sm font-bold text-slate-800 mb-1 mt-1 truncate">{item.name}</div>
                           <div className="text-xs text-slate-500 mb-3">單位: {item.unit}</div>
                           <input type="number" placeholder="數量" value={inputs[item.id] || ''} onChange={(e) => handleInputChange(item.id, e.target.value)} className="w-full border rounded-md px-2 py-1.5 text-sm outline-none text-center bg-slate-50 focus:bg-white" onKeyDown={(e) => (e.key === 'Enter' || e.key === '+') && (e.preventDefault(), handleBulkAddBatch())} />
                         </div>
@@ -568,8 +582,14 @@ export default function App() {
                     <div className="bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{category}</div>
                     <div className="p-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {groupedItems[category].map(item => (
-                        <div key={`retro-item-${item.id}`} className="flex items-center justify-between border rounded p-2">
-                          <span className="text-sm text-slate-700 font-medium truncate pr-2">{item.name}</span>
+                        <div key={`retro-item-${item.id}`} className="flex items-center justify-between border rounded p-2 relative">
+                          {/* 補登畫面也加上刪除按鈕 */}
+                          {item.isLimited && (
+                             <button onClick={() => handleRemoveLimitedItem(item.id)} className="absolute -left-2 -top-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 border border-red-200" title="刪除此限定品">
+                               <X className="w-3 h-3" />
+                             </button>
+                          )}
+                          <span className="text-sm text-slate-700 font-medium truncate pr-2 ml-1">{item.name}</span>
                           <input type="number" min="0" placeholder="0" value={retroInputs[item.id] || ''} onChange={(e) => handleRetroInputChange(item.id, e.target.value)} className="w-14 border rounded px-1 py-1 text-sm text-center outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50" />
                         </div>
                       ))}
