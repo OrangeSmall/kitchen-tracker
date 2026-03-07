@@ -41,7 +41,7 @@ const CATEGORY_COLORS = {
 
 const CHART_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#64748b'];
 
-// 🌟🌟🌟 記得貼上您專屬的 Apps Script 網址 🌟🌟🌟
+// 🌟 專屬 Apps Script 網址
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6IwmqfbSP1m0Xhsw782RqHxk-BGykMZ9XXOGdHPs3FUMReuQ5lb5PSBUdY8qP6nRl/exec';
 
 export default function App() {
@@ -175,7 +175,6 @@ export default function App() {
       const qty = parseInt(retroInputs[id], 10);
       if (qty && qty > 0) {
         const item = activeItems.find(i => i.id === id);
-        // 恢復：保留 (補登) 字眼
         if (item) newBatches.push({ id: `retro-${Date.now()}-${id}`, itemId: item.id, name: item.name, category: item.category, unit: item.unit, time: retroData.time, qty: qty, recorder: `${retroData.recorder}(補登)` });
       }
     });
@@ -184,7 +183,6 @@ export default function App() {
 
     showConfirm("補登確認", `確定要將這些資料補登至 ${retroData.date} (${retroData.store}) 嗎？\n資料將會同步上傳至雲端資料庫。`, async () => {
       try {
-        // 恢復：上傳時名字加上 (補登)
         await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'append', date: retroData.date, store: retroData.store, recorder: `${retroData.recorder}(補登)`, data: newBatches }) });
       } catch (error) { console.error('補登上傳失敗:', error); }
 
@@ -201,7 +199,6 @@ export default function App() {
     });
   };
 
-  // 🌟 終極升級：強制從雲端拉取正確資料，並套用自動格式濾波器
   const handleSyncFromCloud = async () => {
     showConfirm("同步確認", "確定要從雲端下載最新資料嗎？\n這將會以雲端試算表的資料為準，覆蓋目前的歷史明細圖表。\n\n⚠️ 放心，這絕對不會影響您「今日正在現場紀錄」的未結算資料！", async () => {
       setIsSyncing(true);
@@ -209,33 +206,31 @@ export default function App() {
         const response = await fetch(GOOGLE_SCRIPT_URL);
         const result = await response.json();
 
-        // 重組資料給 App 使用，並強制清洗日期與時間格式
         const newHistoryMap = {};
         result.forEach(row => {
-          if (!row.date || !row.name) return; // 避免空行
+          if (!row.date || !row.name) return;
 
-          // 🛡️ 1. 鐵壁防禦：強制轉換為 YYYY-MM-DD
-          let cleanDate = String(row.date);
+          let cleanDate = String(row.date).trim();
           const parsedDate = new Date(cleanDate);
+          
           if (!isNaN(parsedDate.getTime())) {
             const yyyy = parsedDate.getFullYear();
-            // 過濾掉之前因為欄位錯位產生的 1899 年幽靈資料
             if (yyyy < 2020) return; 
             
             const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
             const dd = String(parsedDate.getDate()).padStart(2, '0');
             cleanDate = `${yyyy}-${mm}-${dd}`;
           } else {
-            if (cleanDate.includes('T')) cleanDate = cleanDate.split('T')[0];
-            cleanDate = cleanDate.replace(/\//g, '-');
+            cleanDate = cleanDate.substring(0, 10).replace(/\//g, '-');
           }
 
-          // 🛡️ 2. 鐵壁防禦：強制轉換為 HH:mm
-          let cleanTime = String(row.time);
-          if (cleanTime.includes('T') || cleanTime.length > 10) {
+          let cleanTime = String(row.time).trim();
+          if (cleanTime.length > 5 || cleanTime.includes('T')) {
             const tDate = new Date(cleanTime);
             if (!isNaN(tDate.getTime())) {
-               cleanTime = `${tDate.getHours().toString().padStart(2, '0')}:${tDate.getMinutes().toString().padStart(2, '0')}`;
+               cleanTime = `${String(tDate.getHours()).padStart(2, '0')}:${String(tDate.getMinutes()).padStart(2, '0')}`;
+            } else {
+               cleanTime = cleanTime.substring(0, 5);
             }
           }
 
@@ -243,6 +238,7 @@ export default function App() {
           if (!newHistoryMap[key]) {
             newHistoryMap[key] = { date: cleanDate, store: row.store, records: [] };
           }
+          
           newHistoryMap[key].records.push({
             id: `sync-${Date.now()}-${Math.random()}`,
             time: cleanTime,
@@ -250,7 +246,6 @@ export default function App() {
             name: row.name,
             qty: Number(row.qty) || 0,
             unit: row.unit,
-            // 恢復：保留從雲端抓下來時包含的 (補登) 文字，不再將其消除
             recorder: String(row.recorder || '')
           });
         });
@@ -258,7 +253,7 @@ export default function App() {
         const newHistory = Object.values(newHistoryMap).sort((a, b) => new Date(a.date) - new Date(b.date));
         setHistory(newHistory);
         localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
-        showAlert("成功", "✅ 已成功從雲端同步最新資料！格式與圖表已完全校正。");
+        showAlert("成功", "✅ 已成功從雲端同步最新資料！格式已完全校正。");
       } catch (error) {
         console.error('同步失敗:', error);
         showAlert("錯誤", "同步失敗！請確認有正確更新 Google 試算表的 doGet 程式碼並「建立新版本」。");
@@ -269,7 +264,7 @@ export default function App() {
   };
 
   const handleDeleteHistoryDay = (date, store) => {
-    showConfirm("刪除確認", `確定要同步移除 ${date} (${store}) 的所有紀錄嗎？\n\n⚠️ 注意：這將同時刪除網頁前台與 Google 雲端試算表上的資料！`, async () => {
+    showConfirm("刪除確認", `確定要同步移除 ${date.replace(/-/g, '/')} (${store}) 的所有紀錄嗎？\n\n⚠️ 注意：這將同時刪除網頁前台與 Google 雲端試算表上的資料！`, async () => {
       const newHistory = history.filter(h => !(h.date === date && h.store === store));
       setHistory(newHistory);
       localStorage.setItem('kitchen_history', JSON.stringify(newHistory));
@@ -343,7 +338,6 @@ export default function App() {
     const dailyAggregated = {};
 
     history.forEach(day => {
-      // 視覺呈現使用 YYYY/MM/DD
       const visualDate = day.date.replace(/-/g, '/');
 
       if (!dailyAggregated[visualDate]) {
@@ -381,7 +375,22 @@ export default function App() {
     return Array.from(keys);
   }, [chartData]);
 
-  // 匯出 PNG
+  // 🌟 新增：計算目前歷史紀錄中「各類別的總產量」
+  const historyCategoryTotals = useMemo(() => {
+    const totals = { '便當': 0, '炸物': 0, '烤物': 0, '限定品': 0 };
+    history.forEach(day => {
+      day.records.forEach(rec => {
+        if (totals[rec.category] !== undefined) {
+          totals[rec.category] += rec.qty;
+        } else {
+          totals['限定品'] += rec.qty;
+        }
+      });
+    });
+    return totals;
+  }, [history]);
+
+  // 匯出 PNG (通用函數)
   const generatePNG = async (elementId, filename) => {
     setIsExporting(true);
     try {
@@ -410,6 +419,12 @@ export default function App() {
   const handleExportBatchPNG = () => {
     if (todayBatches.length === 0) { showAlert("提示", "目前尚無時段紀錄可出圖！"); return; }
     showConfirm("出圖確認", "確定要產生並下載「時段出爐明細」嗎？", () => generatePNG('batch-report-template', `時段出爐明細_${new Date().toISOString().split('T')[0]}.png`));
+  };
+
+  // 🌟 新增：數據分析專用出圖功能
+  const handleExportAnalyticsPNG = () => {
+    if (history.length === 0) { showAlert("提示", "目前尚無歷史資料可出圖！"); return; }
+    showConfirm("出圖確認", "確定要產生並下載「產能分析與總量圖表」嗎？", () => generatePNG('analytics-export-area', `產能分析圖表_${new Date().toISOString().split('T')[0]}.png`));
   };
 
 
@@ -530,7 +545,11 @@ export default function App() {
               <div className="flex flex-wrap gap-2">
                 <select value={chartView} onChange={(e) => setChartView(e.target.value)} className="bg-slate-50 border text-sm rounded-lg p-2 outline-none"><option value="total">總體類別</option><option value="便當">便當類</option><option value="炸物">炸物類</option><option value="烤物">烤物類</option><option value="限定品">限定品</option></select>
                 
-                {/* 🌟 新增：一鍵雲端同步按鈕 */}
+                {/* 🌟 數據分析出圖按鈕 */}
+                <button onClick={handleExportAnalyticsPNG} disabled={isExporting} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center disabled:opacity-50 shadow-sm">
+                  <ImageIcon className="w-4 h-4 mr-1.5" />出圖 (PNG)
+                </button>
+
                 <button onClick={handleSyncFromCloud} disabled={isSyncing} className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-medium hover:bg-emerald-100 flex items-center transition-colors disabled:opacity-50">
                   <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
                   {isSyncing ? '同步中...' : '同步雲端'}
@@ -542,19 +561,39 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border h-[400px]">
-              {history.length === 0 ? <div className="h-full flex items-center justify-center text-slate-400">尚無資料</div> : 
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} dy={10} />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    {chartLines.map((key, index) => <Line key={key} type="monotone" dataKey={key} stroke={chartView === 'total' ? CATEGORY_COLORS[key] : CHART_COLORS[index % CHART_COLORS.length]} strokeWidth={3} dot={{ r: 4 }} />)}
-                  </LineChart>
-                </ResponsiveContainer>
-              }
+            {/* 🌟 將圖表與數據加總包裝在同一個 div 以便截圖出圖 */}
+            <div id="analytics-export-area" className="bg-white p-6 rounded-xl shadow-sm border space-y-6">
+              
+              {/* 圖表區 */}
+              <div className="h-[400px]">
+                {history.length === 0 ? <div className="h-full flex items-center justify-center text-slate-400">尚無資料</div> : 
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} dy={10} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Legend />
+                      {chartLines.map((key, index) => <Line key={key} type="monotone" dataKey={key} stroke={chartView === 'total' ? CATEGORY_COLORS[key] : CHART_COLORS[index % CHART_COLORS.length]} strokeWidth={3} dot={{ r: 4 }} isAnimationActive={!isExporting} />)}
+                    </LineChart>
+                  </ResponsiveContainer>
+                }
+              </div>
+
+              {/* 🌟 新增：各類別目前總產量統計區塊 */}
+              {history.length > 0 && (
+                <div className="pt-4 border-t border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-500 mb-3 text-center">各類別目前總產量統計</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {Object.entries(historyCategoryTotals).map(([cat, total]) => (
+                      <div key={cat} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col items-center justify-center">
+                        <span className="text-sm font-bold mb-1" style={{ color: CATEGORY_COLORS[cat] || '#64748b' }}>{cat}</span>
+                        <span className="text-2xl font-black text-slate-800">{total}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -575,7 +614,6 @@ export default function App() {
                     {history.slice().reverse().flatMap((day) => day.records.map((rec, i) => (
                       <tr key={`${day.date}-${day.store}-${i}`}>
                         <td className="px-6 py-3">
-                          {/* 視覺呈現皆換為乾淨的 YYYY/MM/DD */}
                           {i === 0 ? <div className="flex items-center gap-2">{day.date.replace(/-/g, '/')} <button onClick={() => handleDeleteHistoryDay(day.date, day.store)} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-full" title="刪除此日畫面的紀錄"><Trash2 className="w-3 h-3" /></button></div> : ''}
                         </td>
                         <td className="px-6 py-3">{day.store}</td>
