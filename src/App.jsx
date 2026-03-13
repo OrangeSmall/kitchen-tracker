@@ -30,12 +30,14 @@ const BASELINE_ITEMS = [
   { id: 'g8', category: '烤物', name: '秋刀魚', unit: '盒' },
   { id: 'g9', category: '烤物', name: '焗烤龍蝦', unit: '盒' },
   { id: 'g10', category: '烤物', name: '海鮮茶碗蒸', unit: '份' },
+  { id: 's1', category: '壽司', name: '特製壽司', unit: '盒' },
 ];
 
 const CATEGORY_COLORS = {
   '便當': '#F59E0B',
   '炸物': '#EF4444',
   '烤物': '#10B981',
+  '壽司': '#06B6D4',
   '限定品': '#8B5CF6'
 };
 
@@ -346,6 +348,7 @@ export default function App() {
           dailyAggregated[visualDate]['便當'] = 0;
           dailyAggregated[visualDate]['炸物'] = 0;
           dailyAggregated[visualDate]['烤物'] = 0;
+          dailyAggregated[visualDate]['壽司'] = 0;
           dailyAggregated[visualDate]['限定品'] = 0;
         }
       }
@@ -377,7 +380,7 @@ export default function App() {
 
   // 🌟 新增：計算目前歷史紀錄中「各類別的總產量」
   const historyCategoryTotals = useMemo(() => {
-    const totals = { '便當': 0, '炸物': 0, '烤物': 0, '限定品': 0 };
+    const totals = { '便當': 0, '炸物': 0, '烤物': 0, '壽司': 0, '限定品': 0 };
     history.forEach(day => {
       day.records.forEach(rec => {
         if (totals[rec.category] !== undefined) {
@@ -543,7 +546,7 @@ export default function App() {
             <div className="bg-white p-5 rounded-xl shadow-sm border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-lg font-bold">產能趨勢分析</h2>
               <div className="flex flex-wrap gap-2">
-                <select value={chartView} onChange={(e) => setChartView(e.target.value)} className="bg-slate-50 border text-sm rounded-lg p-2 outline-none"><option value="total">總體類別</option><option value="便當">便當類</option><option value="炸物">炸物類</option><option value="烤物">烤物類</option><option value="限定品">限定品</option></select>
+                <select value={chartView} onChange={(e) => setChartView(e.target.value)} className="bg-slate-50 border text-sm rounded-lg p-2 outline-none"><option value="total">總體類別</option><option value="便當">便當類</option><option value="炸物">炸物類</option><option value="烤物">烤物類</option><option value="壽司">壽司類</option><option value="限定品">限定品</option></select>
                 
                 {/* 🌟 數據分析出圖按鈕 */}
                 <button onClick={handleExportAnalyticsPNG} disabled={isExporting} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center disabled:opacity-50 shadow-sm">
@@ -641,7 +644,7 @@ export default function App() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95">
             <h3 className="font-bold text-lg mb-4">新增限定品項</h3>
             <div className="space-y-4">
-              <select value={newItemData.category} onChange={(e) => setNewItemData({...newItemData, category: e.target.value})} className="w-full border rounded-lg p-2 outline-none"><option value="限定品">一般限定品</option><option value="便當">便當類</option><option value="炸物">炸物類</option><option value="烤物">烤物類</option></select>
+              <select value={newItemData.category} onChange={(e) => setNewItemData({...newItemData, category: e.target.value})} className="w-full border rounded-lg p-2 outline-none"><option value="限定品">一般限定品</option><option value="便當">便當類</option><option value="炸物">炸物類</option><option value="烤物">烤物類</option><option value="壽司">壽司類</option></select>
               <input type="text" placeholder="品項名稱" value={newItemData.name} onChange={(e) => setNewItemData({...newItemData, name: e.target.value})} className="w-full border rounded-lg p-2 outline-none" />
               <input type="text" placeholder="單位 (份/個)" value={newItemData.unit} onChange={(e) => setNewItemData({...newItemData, unit: e.target.value})} className="w-full border rounded-lg p-2 outline-none" />
             </div>
